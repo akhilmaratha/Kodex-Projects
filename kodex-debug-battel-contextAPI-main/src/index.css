@@ -1,0 +1,32 @@
+@import "tailwindcss";
+
+@font-face {
+    font-family: "Gilroy";
+    src: url("./Gilroy-Regular.ttf") format("truetype");
+    font-weight: 400;
+    font-style: normal;
+}
+
+html,
+body,
+#root {
+    min-height: 100%;
+}
+
+body {
+    margin: 0;
+    font-family: "Gilroy", sans-serif;
+    background: #f6f7fb;
+    color: #0f172a;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+button,
+input,
+textarea,
+select {
+    font: inherit;
+}

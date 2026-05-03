@@ -1,0 +1,14 @@
+{
+  "name": "product-crud-api",
+  "version": "1.0.0",
+  "description": "Product Management CRUD API",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node index.js"
+  },
+  "dependencies": {
+    "express": "^5.2.1",
+    "mongoose": "^7.8.9"
+  }
+}

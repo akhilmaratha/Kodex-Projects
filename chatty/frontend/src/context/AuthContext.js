@@ -13,7 +13,6 @@ export const AuthProvider = ({ children }) => {
     const userInfo = JSON.parse(localStorage.getItem('userInfo'));
     setUser(userInfo);
 
-    // If user is not logged in, redirect to login unless already on login/signup
     if (!userInfo) {
       if (window.location.pathname !== '/login' && window.location.pathname !== '/signup') {
         router.push('/login');

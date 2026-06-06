@@ -21,7 +21,7 @@ const server = http.createServer(app);
 
 const io = new Server(server, {
   cors: {
-    origin: '*', // We can restrict this to frontend URL later
+    origin: '*',
   },
 });
 
@@ -34,7 +34,6 @@ app.get('/', (req, res) => {
   res.send('API is running...');
 });
 
-// Socket.io logic
 io.on('connection', (socket) => {
   console.log('Connected to socket.io');
 

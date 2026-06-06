@@ -4,7 +4,6 @@ const User = require('../models/User');
 
 const router = express.Router();
 
-// Get all users (except logged in user) based on search query
 router.get('/', protect, async (req, res) => {
   const keyword = req.query.search
     ? {

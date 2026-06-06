@@ -5,7 +5,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useRouter } from 'next/navigation';
 import io from 'socket.io-client';
 
-const ENDPOINT = 'http://localhost:5000';
+const ENDPOINT = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 let socket, selectedChatCompare;
 
 export default function Chats() {
@@ -22,7 +22,6 @@ export default function Chats() {
   const [typing, setTyping] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
 
-  // Group Chat Modal States
   const [showGroupModal, setShowGroupModal] = useState(false);
   const [groupChatName, setGroupChatName] = useState('');
   const [selectedUsers, setSelectedUsers] = useState([]);
@@ -95,7 +94,7 @@ export default function Chats() {
   const handleSearch = async (query, isGroup = false) => {
     if (!query) return;
     try {
-      const res = await fetch(`http://localhost:5000/api/users?search=${query}`, {
+      const res = await fetch(`${ENDPOINT}/api/users?search=${query}`, {
         headers: { Authorization: `Bearer ${user.token}` },
       });
       const data = await res.json();
@@ -109,7 +108,7 @@ export default function Chats() {
   const fetchChats = async () => {
     if (!user) return;
     try {
-      const res = await fetch('http://localhost:5000/api/chats', {
+      const res = await fetch(`${ENDPOINT}/api/chats`, {
         headers: { Authorization: `Bearer ${user.token}` },
       });
       const data = await res.json();
@@ -121,7 +120,7 @@ export default function Chats() {
 
   const accessChat = async (userId) => {
     try {
-      const res = await fetch('http://localhost:5000/api/chats', {
+      const res = await fetch(`${ENDPOINT}/api/chats`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -140,7 +139,7 @@ export default function Chats() {
   const fetchMessages = async () => {
     if (!selectedChat) return;
     try {
-      const res = await fetch(`http://localhost:5000/api/messages/${selectedChat._id}`, {
+      const res = await fetch(`${ENDPOINT}/api/messages/${selectedChat._id}`, {
         headers: { Authorization: `Bearer ${user.token}` },
       });
       const data = await res.json();
@@ -154,7 +153,7 @@ export default function Chats() {
     if (e.key === 'Enter' && newMessage) {
       socket.emit('stop typing', selectedChat._id);
       try {
-        const res = await fetch('http://localhost:5000/api/messages', {
+        const res = await fetch(`${ENDPOINT}/api/messages`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -208,7 +207,7 @@ export default function Chats() {
   const handleSubmitGroup = async () => {
     if (!groupChatName || !selectedUsers) return;
     try {
-      const res = await fetch('http://localhost:5000/api/chats/group', {
+      const res = await fetch(`${ENDPOINT}/api/chats/group`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -237,7 +236,7 @@ export default function Chats() {
     <div className="flex h-screen flex-col bg-gray-900 text-white font-sans">
       {/* Header */}
       <div className="flex justify-between items-center bg-gray-800 p-4 border-b border-gray-700 shadow-md z-10">
-        <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-500">
+        <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-linear-to-r from-blue-400 to-purple-500">
           Chatty
         </h1>
         <div className="flex items-center gap-4">
@@ -346,7 +345,7 @@ export default function Chats() {
                   <span className="text-xs text-gray-400 bg-gray-700 px-2 py-1 rounded-md">Group Chat</span>
                 )}
               </div>
-              <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-gradient-to-b from-gray-900 to-gray-800">
+              <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-linear-to-b from-gray-900 to-gray-800">
                 {messages.map((m, i) => (
                   <div
                     key={m._id}

@@ -14,14 +14,25 @@ dotenv.config();
 connectDB();
 
 const app = express();
-app.use(cors());
+
+// Allow parsing of comma-separated URLs from env, defaulting to localhost
+const allowedOrigins = process.env.CLIENT_URL;
+
+app.use(cors({
+  origin: allowedOrigins,
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  credentials: true,
+}));
 app.use(express.json());
 
 const server = http.createServer(app);
 
 const io = new Server(server, {
+  pingTimeout: 60000,
   cors: {
-    origin: '*',
+    origin: allowedOrigins,
+    methods: ['GET', 'POST'],
+    credentials: true,
   },
 });
 

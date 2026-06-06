@@ -5,6 +5,9 @@ const http = require('http');
 const { Server } = require('socket.io');
 const connectDB = require('./config/db');
 const authRoutes = require('./routes/authRoutes');
+const chatRoutes = require('./routes/chatRoutes');
+const messageRoutes = require('./routes/messageRoutes');
+const userRoutes = require('./routes/userRoutes');
 
 dotenv.config();
 
@@ -23,6 +26,9 @@ const io = new Server(server, {
 });
 
 app.use('/api/auth', authRoutes);
+app.use('/api/chats', chatRoutes);
+app.use('/api/messages', messageRoutes);
+app.use('/api/users', userRoutes);
 
 app.get('/', (req, res) => {
   res.send('API is running...');
@@ -35,6 +41,22 @@ io.on('connection', (socket) => {
   socket.on('setup', (userData) => {
     socket.join(userData._id);
     socket.emit('connected');
+  });
+
+  socket.on('join chat', (room) => {
+    socket.join(room);
+    console.log('User Joined Room: ' + room);
+  });
+
+  socket.on('new message', (newMessageRecieved) => {
+    var chat = newMessageRecieved.chat;
+
+    if (!chat.users) return console.log('chat.users not defined');
+
+    chat.users.forEach((user) => {
+      if (user._id == newMessageRecieved.sender._id) return;
+      socket.in(user._id).emit('message recieved', newMessageRecieved);
+    });
   });
 
   socket.on('disconnect', () => {

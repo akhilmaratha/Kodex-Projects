@@ -15,8 +15,9 @@ connectDB();
 
 const app = express();
 
-// Allow parsing of comma-separated URLs from env, defaulting to localhost
-const allowedOrigins = process.env.CLIENT_URL;
+const allowedOrigins = process.env.CLIENT_URL
+  ? process.env.CLIENT_URL.split(',').map((origin) => origin.trim()).filter(Boolean)
+  : ['http://localhost:3000'];
 
 app.use(cors({
   origin: allowedOrigins,
@@ -49,11 +50,17 @@ io.on('connection', (socket) => {
   console.log('Connected to socket.io');
 
   socket.on('setup', (userData) => {
+    if (!userData?._id) {
+      return;
+    }
     socket.join(userData._id);
     socket.emit('connected');
   });
 
   socket.on('join chat', (room) => {
+    if (!room) {
+      return;
+    }
     socket.join(room);
     console.log('User Joined Room: ' + room);
   });
@@ -62,12 +69,14 @@ io.on('connection', (socket) => {
   socket.on('stop typing', (room) => socket.in(room).emit('stop typing'));
 
   socket.on('new message', (newMessageRecieved) => {
-    var chat = newMessageRecieved.chat;
+    const chat = newMessageRecieved?.chat;
 
-    if (!chat.users) return console.log('chat.users not defined');
+    if (!chat?.users || !newMessageRecieved?.sender?._id) {
+      return;
+    }
 
     chat.users.forEach((user) => {
-      if (user._id == newMessageRecieved.sender._id) return;
+      if (user._id === newMessageRecieved.sender._id) return;
       socket.in(user._id).emit('message recieved', newMessageRecieved);
     });
   });
@@ -79,4 +88,4 @@ io.on('connection', (socket) => {
 
 const PORT = process.env.PORT || 5000;
 
-server.listen(PORT, console.log(`Server started on PORT ${PORT}`));
+server.listen(PORT, () => console.log(`Server started on PORT ${PORT}`));

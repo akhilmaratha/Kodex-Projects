@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useCallback, useEffect, useState, useRef } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useRouter } from 'next/navigation';
 import io from 'socket.io-client';
@@ -34,6 +34,19 @@ export default function Chats() {
 
   const messagesEndRef = useRef(null);
   const typingTimeoutRef = useRef(null);
+
+  const fetchChats = useCallback(async () => {
+    if (!user) return;
+    try {
+      const res = await fetch(`${ENDPOINT}/api/chats`, {
+        headers: { Authorization: `Bearer ${user.token}` },
+      });
+      const data = await res.json();
+      setChats(data);
+    } catch (error) {
+      console.error(error);
+    }
+  }, [user]);
 
   useEffect(() => {
     if (user) {
@@ -87,19 +100,64 @@ export default function Chats() {
   }, [user]);
 
   useEffect(() => {
-    if (user) {
-      fetchChats();
+    if (!user) {
+      return undefined;
     }
+
+    let ignore = false;
+
+    const loadChats = async () => {
+      try {
+        const res = await fetch(`${ENDPOINT}/api/chats`, {
+          headers: { Authorization: `Bearer ${user.token}` },
+        });
+        const data = await res.json();
+
+        if (!ignore) {
+          setChats(data);
+        }
+      } catch (error) {
+        console.error(error);
+      }
+    };
+
+    loadChats();
+
+    return () => {
+      ignore = true;
+    };
   }, [user]);
 
   useEffect(() => {
     selectedChatCompare = selectedChat;
-    if (selectedChat) {
-      fetchMessages();
-      socket?.emit('join chat', selectedChat._id);
-      setRenameGroupInput(selectedChat.chatName);
+    if (!selectedChat || !user) {
+      return undefined;
     }
-  }, [selectedChat]);
+
+    let ignore = false;
+
+    const loadMessages = async () => {
+      try {
+        const res = await fetch(`${ENDPOINT}/api/messages/${selectedChat._id}`, {
+          headers: { Authorization: `Bearer ${user.token}` },
+        });
+        const data = await res.json();
+
+        if (!ignore) {
+          setMessages(data);
+        }
+      } catch (error) {
+        console.error(error);
+      }
+    };
+
+    loadMessages();
+    socket?.emit('join chat', selectedChat._id);
+
+    return () => {
+      ignore = true;
+    };
+  }, [selectedChat, user]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -144,19 +202,6 @@ export default function Chats() {
     }
   };
 
-  const fetchChats = async () => {
-    if (!user) return;
-    try {
-      const res = await fetch(`${ENDPOINT}/api/chats`, {
-        headers: { Authorization: `Bearer ${user.token}` },
-      });
-      const data = await res.json();
-      setChats(data);
-    } catch (error) {
-      console.error(error);
-    }
-  };
-
   const accessChat = async (userId) => {
     try {
       const res = await fetch(`${ENDPOINT}/api/chats`, {
@@ -174,19 +219,6 @@ export default function Chats() {
       }
       setChats((prev) => (prev.find((c) => c._id === data._id) ? prev : [data, ...prev]));
       setSelectedChat(data);
-    } catch (error) {
-      console.error(error);
-    }
-  };
-
-  const fetchMessages = async () => {
-    if (!selectedChat) return;
-    try {
-      const res = await fetch(`${ENDPOINT}/api/messages/${selectedChat._id}`, {
-        headers: { Authorization: `Bearer ${user.token}` },
-      });
-      const data = await res.json();
-      setMessages(data);
     } catch (error) {
       console.error(error);
     }
@@ -538,7 +570,10 @@ export default function Chats() {
                 
                 {selectedChat.isGroupChat && (
                   <button
-                    onClick={() => setShowGroupSettings(true)}
+                    onClick={() => {
+                      setRenameGroupInput(selectedChat.chatName);
+                      setShowGroupSettings(true);
+                    }}
                     className="p-2 bg-gray-800 hover:bg-gray-700 rounded-lg transition-colors border border-gray-700 hover:border-gray-600 text-gray-400 hover:text-white"
                   >
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>

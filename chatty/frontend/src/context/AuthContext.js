@@ -15,14 +15,17 @@ const getStoredUser = () => {
 };
 
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null);
+  const [user, setUser] = useState(() => {
+    if (typeof window === 'undefined') {
+      return null;
+    }
+
+    return getStoredUser();
+  });
   const router = useRouter();
 
   useEffect(() => {
-    const userInfo = getStoredUser();
-    setUser(userInfo);
-
-    if (!userInfo) {
+    if (!user) {
       if (window.location.pathname !== '/login' && window.location.pathname !== '/signup') {
         router.push('/login');
       }
@@ -31,7 +34,7 @@ export const AuthProvider = ({ children }) => {
         router.push('/chats');
       }
     }
-  }, [router]);
+  }, [router, user]);
 
   return (
     <AuthContext.Provider value={{ user, setUser }}>

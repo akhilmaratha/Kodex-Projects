@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useCallback, useEffect, useState, useRef } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useRouter } from 'next/navigation';
 import io from 'socket.io-client';
@@ -33,6 +33,20 @@ export default function Chats() {
   const [addMemberSearchResult, setAddMemberSearchResult] = useState([]);
 
   const messagesEndRef = useRef(null);
+  const typingTimeoutRef = useRef(null);
+
+  const fetchChats = useCallback(async () => {
+    if (!user) return;
+    try {
+      const res = await fetch(`${ENDPOINT}/api/chats`, {
+        headers: { Authorization: `Bearer ${user.token}` },
+      });
+      const data = await res.json();
+      setChats(data);
+    } catch (error) {
+      console.error(error);
+    }
+  }, [user]);
 
   useEffect(() => {
     if (user) {
@@ -86,56 +100,103 @@ export default function Chats() {
   }, [user]);
 
   useEffect(() => {
-    fetchChats();
-  }, []);
+    if (!user) {
+      return undefined;
+    }
+
+    let ignore = false;
+
+    const loadChats = async () => {
+      try {
+        const res = await fetch(`${ENDPOINT}/api/chats`, {
+          headers: { Authorization: `Bearer ${user.token}` },
+        });
+        const data = await res.json();
+
+        if (!ignore) {
+          setChats(data);
+        }
+      } catch (error) {
+        console.error(error);
+      }
+    };
+
+    loadChats();
+
+    return () => {
+      ignore = true;
+    };
+  }, [user]);
 
   useEffect(() => {
     selectedChatCompare = selectedChat;
-    if (selectedChat) {
-      fetchMessages();
-      socket.emit('join chat', selectedChat._id);
-      setRenameGroupInput(selectedChat.chatName);
+    if (!selectedChat || !user) {
+      return undefined;
     }
-  }, [selectedChat]);
+
+    let ignore = false;
+
+    const loadMessages = async () => {
+      try {
+        const res = await fetch(`${ENDPOINT}/api/messages/${selectedChat._id}`, {
+          headers: { Authorization: `Bearer ${user.token}` },
+        });
+        const data = await res.json();
+
+        if (!ignore) {
+          setMessages(data);
+        }
+      } catch (error) {
+        console.error(error);
+      }
+    };
+
+    loadMessages();
+    socket?.emit('join chat', selectedChat._id);
+
+    return () => {
+      ignore = true;
+    };
+  }, [selectedChat, user]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  useEffect(() => {
+    return () => {
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+    };
+  }, []);
+
   const logoutHandler = () => {
     localStorage.removeItem('userInfo');
+    socket?.disconnect();
+    socket = null;
+    setSocketConnected(false);
     setUser(null);
     router.push('/login');
   };
 
   const handleSearch = async (query, type = 'user') => {
-    if (!query) {
+    const searchQuery = query.trim();
+
+    if (!searchQuery || !user) {
       if (type === 'group') setGroupSearchResult([]);
       else if (type === 'addMember') setAddMemberSearchResult([]);
       else setSearchResult([]);
       return;
     }
     try {
-      const res = await fetch(`${ENDPOINT}/api/users?search=${query}`, {
+      const res = await fetch(`${ENDPOINT}/api/users?search=${encodeURIComponent(searchQuery)}`, {
         headers: { Authorization: `Bearer ${user.token}` },
       });
       const data = await res.json();
       if (type === 'group') setGroupSearchResult(data);
       else if (type === 'addMember') setAddMemberSearchResult(data);
       else setSearchResult(data);
-    } catch (error) {
-      console.error(error);
-    }
-  };
-
-  const fetchChats = async () => {
-    if (!user) return;
-    try {
-      const res = await fetch(`${ENDPOINT}/api/chats`, {
-        headers: { Authorization: `Bearer ${user.token}` },
-      });
-      const data = await res.json();
-      setChats(data);
     } catch (error) {
       console.error(error);
     }
@@ -152,29 +213,24 @@ export default function Chats() {
         body: JSON.stringify({ userId }),
       });
       const data = await res.json();
-      if (!chats.find((c) => c._id === data._id)) setChats([data, ...chats]);
+      if (!res.ok) {
+        alert(data.message || 'Failed to open chat');
+        return;
+      }
+      setChats((prev) => (prev.find((c) => c._id === data._id) ? prev : [data, ...prev]));
       setSelectedChat(data);
     } catch (error) {
       console.error(error);
     }
   };
 
-  const fetchMessages = async () => {
-    if (!selectedChat) return;
-    try {
-      const res = await fetch(`${ENDPOINT}/api/messages/${selectedChat._id}`, {
-        headers: { Authorization: `Bearer ${user.token}` },
-      });
-      const data = await res.json();
-      setMessages(data);
-    } catch (error) {
-      console.error(error);
-    }
-  };
-
   const sendMessage = async (e) => {
-    if (e.key === 'Enter' && newMessage) {
-      socket.emit('stop typing', selectedChat._id);
+    if (e.key === 'Enter' && selectedChat && newMessage.trim()) {
+      socket?.emit('stop typing', selectedChat._id);
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+      setTyping(false);
       try {
         const res = await fetch(`${ENDPOINT}/api/messages`, {
           method: 'POST',
@@ -183,14 +239,19 @@ export default function Chats() {
             Authorization: `Bearer ${user.token}`,
           },
           body: JSON.stringify({
-            content: newMessage,
+            content: newMessage.trim(),
             chatId: selectedChat._id,
           }),
         });
         const data = await res.json();
+        if (!res.ok) {
+          alert(data.message || 'Failed to send message');
+          return;
+        }
         setNewMessage('');
-        setMessages([...messages, data]);
-        socket.emit('new message', data);
+        setMessages((prev) => [...prev, data]);
+        setChats((prev) => [data.chat, ...prev.filter((c) => c._id !== data.chat._id)]);
+        socket?.emit('new message', data);
       } catch (error) {
         console.error(error);
       }
@@ -200,35 +261,34 @@ export default function Chats() {
   const typingHandler = (e) => {
     setNewMessage(e.target.value);
 
-    if (!socketConnected) return;
+    if (!socketConnected || !selectedChat) return;
 
     if (!typing) {
       setTyping(true);
-      socket.emit('typing', selectedChat._id);
+      socket?.emit('typing', selectedChat._id);
     }
-    let lastTypingTime = new Date().getTime();
-    var timerLength = 3000;
-    setTimeout(() => {
-      var timeNow = new Date().getTime();
-      var timeDiff = timeNow - lastTypingTime;
-      if (timeDiff >= timerLength && typing) {
-        socket.emit('stop typing', selectedChat._id);
-        setTyping(false);
-      }
-    }, timerLength);
+
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+
+    typingTimeoutRef.current = setTimeout(() => {
+      socket?.emit('stop typing', selectedChat._id);
+      setTyping(false);
+    }, 3000);
   };
 
   const handleGroupAdd = (userToAdd) => {
-    if (selectedUsers.includes(userToAdd)) return;
-    setSelectedUsers([...selectedUsers, userToAdd]);
+    if (selectedUsers.some((selectedUser) => selectedUser._id === userToAdd._id)) return;
+    setSelectedUsers((prev) => [...prev, userToAdd]);
   };
 
   const handleDeleteUser = (userToDelete) => {
-    setSelectedUsers(selectedUsers.filter((u) => u._id !== userToDelete._id));
+    setSelectedUsers((prev) => prev.filter((u) => u._id !== userToDelete._id));
   };
 
   const handleSubmitGroup = async () => {
-    if (!groupChatName || !selectedUsers) return;
+    if (!groupChatName.trim() || selectedUsers.length < 2) return;
     try {
       const res = await fetch(`${ENDPOINT}/api/chats/group`, {
         method: 'POST',
@@ -237,7 +297,7 @@ export default function Chats() {
           Authorization: `Bearer ${user.token}`,
         },
         body: JSON.stringify({
-          name: groupChatName,
+          name: groupChatName.trim(),
           users: JSON.stringify(selectedUsers.map((u) => u._id)),
         }),
       });
@@ -246,7 +306,7 @@ export default function Chats() {
         alert(data.message || 'Failed to create group chat');
         return;
       }
-      setChats([data, ...chats]);
+      setChats((prev) => [data, ...prev]);
       setShowGroupModal(false);
       setSelectedUsers([]);
       setGroupChatName('');
@@ -258,7 +318,7 @@ export default function Chats() {
   };
 
   const handleRenameGroup = async () => {
-    if (!renameGroupInput) return;
+    if (!renameGroupInput.trim()) return;
     try {
       const res = await fetch(`${ENDPOINT}/api/chats/rename`, {
         method: 'PUT',
@@ -268,7 +328,7 @@ export default function Chats() {
         },
         body: JSON.stringify({
           chatId: selectedChat._id,
-          chatName: renameGroupInput,
+          chatName: renameGroupInput.trim(),
         }),
       });
       const data = await res.json();
@@ -277,7 +337,7 @@ export default function Chats() {
         return;
       }
       setSelectedChat(data);
-      setChats(chats.map((c) => (c._id === data._id ? data : c)));
+      setChats((prev) => prev.map((c) => (c._id === data._id ? data : c)));
     } catch (error) {
       console.error(error);
     }
@@ -302,7 +362,7 @@ export default function Chats() {
         return;
       }
       userToRemove._id === user._id ? setSelectedChat(null) : setSelectedChat(data);
-      setChats(chats.map((c) => (c._id === data._id ? data : c)));
+      setChats((prev) => prev.map((c) => (c._id === data._id ? data : c)));
       if (userToRemove._id === user._id) {
          fetchChats();
          setShowGroupSettings(false);
@@ -340,7 +400,7 @@ export default function Chats() {
         return;
       }
       setSelectedChat(data);
-      setChats(chats.map((c) => (c._id === data._id ? data : c)));
+      setChats((prev) => prev.map((c) => (c._id === data._id ? data : c)));
       setAddMemberSearchResult([]);
     } catch (error) {
       console.error(error);
@@ -348,7 +408,9 @@ export default function Chats() {
   };
 
   const getSenderName = (loggedUser, users) => {
-    return users[0]._id === loggedUser._id ? users[1].name : users[0].name;
+    if (!users?.length || !loggedUser) return 'Unknown User';
+    const sender = users.find((chatUser) => chatUser._id !== loggedUser._id);
+    return sender?.name || 'Unknown User';
   };
 
   return (
@@ -508,7 +570,10 @@ export default function Chats() {
                 
                 {selectedChat.isGroupChat && (
                   <button
-                    onClick={() => setShowGroupSettings(true)}
+                    onClick={() => {
+                      setRenameGroupInput(selectedChat.chatName);
+                      setShowGroupSettings(true);
+                    }}
                     className="p-2 bg-gray-800 hover:bg-gray-700 rounded-lg transition-colors border border-gray-700 hover:border-gray-600 text-gray-400 hover:text-white"
                   >
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
